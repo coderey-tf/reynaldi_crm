@@ -1,53 +1,36 @@
-# Base image dengan Node.js dan PHP
-FROM node:20-bullseye
+# Base image with PHP, Composer, Node, etc.
+FROM php:8.2-fpm
 
-# Install PHP dan dependensi Laravel
-RUN apt update && apt install -y \
-    php \
-    php-cli \
-    php-mbstring \
-    php-xml \
-    php-bcmath \
-    php-curl \
-    php-mysql \
-    unzip \
-    git \
-    curl \
-    libzip-dev \
-    zip \
-    && apt clean
+# Install system dependencies & PHP extensions
+RUN apt-get update && apt-get install -y \
+    git curl unzip zip libpng-dev libonig-dev libxml2-dev libzip-dev libjpeg-dev libfreetype6-dev \
+    nodejs npm \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install pdo pdo_mysql mbstring zip gd
 
 # Install Composer
-RUN curl -sS https://getcomposer.org/installer | php && \
-    mv composer.phar /usr/local/bin/composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Enable corepack agar bisa pakai pnpm
-RUN corepack enable
+# Set working directory
+WORKDIR /var/www
 
-# Buat direktori kerja
-WORKDIR /app
-
-# Salin semua file ke dalam container
+# Copy app source code
 COPY . .
 
-# Install dependency backend (PHP)
+# Install PHP dependencies
 RUN composer install --no-interaction --prefer-dist --optimize-autoloader
 
-# Install dependency frontend (React + Vite)
-RUN pnpm install
+# Copy .env if exists (or manually mount in deployment)
+# COPY .env.example .env
 
-# Build frontend
-RUN pnpm run build
+# Generate key (only if needed in dev)
+# RUN php artisan key:generate
 
-# Expose port Laravel default
+# Install Node dependencies & build frontend
+RUN npm install && npm run build
+
+# Expose port (useful if needed for PHP dev server)
 EXPOSE 8000
 
-# Set permission storage & cache
-RUN chmod -R 775 storage bootstrap/cache
-
-# Generate key dan migrate (optional, untuk dev saja)
-RUN php artisan key:generate
-# RUN php artisan migrate --force
-
-# Jalankan Laravel
-CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+# Entrypoint when running container (optional, adjust as needed)
+CMD ["php-fpm"]
